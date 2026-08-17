@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { availableBatters, createInnings, economy, formatOvers, scoreBall, setBowler, setNextBatter, strikeRate } from '../cricket/scoring';
 
-export default function Scoring({ match, onExit }) {
-  const [inningsList, setInningsList] = useState(() => [createInnings(match.teams[0], match.teams[1], match.overs)]);
-  const [inningsIndex, setInningsIndex] = useState(0);
+export default function Scoring({ match, onExit, onSave }) {
+  const [inningsList, setInningsList] = useState(() => match.inningsList?.length ? match.inningsList : [createInnings(match.teams[0], match.teams[1], match.overs)]);
+  const [inningsIndex, setInningsIndex] = useState(() => match.inningsIndex ?? 0);
   const [pendingWicket, setPendingWicket] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const innings = inningsList[inningsIndex];
@@ -14,17 +14,22 @@ export default function Scoring({ match, onExit }) {
   const runRate = useMemo(() => innings.legalBalls ? (innings.runs / innings.legalBalls * 6).toFixed(2) : '0.00', [innings.runs, innings.legalBalls]);
   const required = innings.target === null ? null : Math.max(0, innings.target - innings.runs);
   const requiredRate = required !== null && innings.legalBalls < innings.maxOvers * 6 ? (required / ((innings.maxOvers * 6 - innings.legalBalls) / 6)).toFixed(2) : null;
-  const save = (next) => setInningsList((current) => current.map((item, index) => index === inningsIndex ? next : item));
+  const save = (next) => {
+    const nextList = inningsList.map((item, index) => index === inningsIndex ? next : item);
+    setInningsList(nextList);
+    onSave({ ...match, inningsList: nextList, inningsIndex, updatedAt: new Date().toISOString(), status: inningsIndex === 1 && next.completed ? 'completed' : 'in-progress' });
+  };
   const addBall = (runs, extras = 0, extraType = null) => { if (innings.completed || innings.pendingBatter) return; save(scoreBall(innings, { runs, extras, extraType, wicket: pendingWicket })); setPendingWicket(false); };
-  const startSecondInnings = () => { const next = createInnings(bowling, batting, match.overs, innings.runs + 1); setInningsList((current) => [...current, next]); setInningsIndex(1); setShowStats(false); };
+  const startSecondInnings = () => { const next = createInnings(bowling, batting, match.overs, innings.runs + 1); const nextList = [...inningsList, next]; setInningsList(nextList); setInningsIndex(1); setShowStats(false); onSave({ ...match, inningsList: nextList, inningsIndex: 1, updatedAt: new Date().toISOString(), status: 'in-progress' }); };
   const selectBatter = (event) => save(setNextBatter(innings, event.target.value));
   const selectBowler = (event) => save(setBowler(innings, event.target.value));
   const matchComplete = inningsIndex === 1 && innings.completed;
   const result = matchComplete ? (innings.result === 'chased' ? `${batting.name} won by ${10 - innings.wickets} wickets` : innings.runs === inningsList[0].runs ? 'Match tied' : innings.runs > inningsList[0].runs ? `${batting.name} won by ${innings.runs - inningsList[0].runs} runs` : `${bowling.name} won by ${inningsList[0].runs - innings.runs} runs`) : null;
+  const exit = () => onExit({ ...match, inningsList, inningsIndex, updatedAt: new Date().toISOString() });
 
   return (
     <main className="scoring-page">
-      <header className="score-header"><button className="secondary" onClick={onExit}>← Back</button><div><span className="eyebrow">Innings {inningsIndex + 1} · {innings.completed ? 'Complete' : 'Live'}</span><h1>{match.name}</h1></div><span className={innings.completed ? 'status complete' : 'status'}>{matchComplete ? 'Match complete' : innings.completed ? 'Innings complete' : 'Live'}</span></header>
+      <header className="score-header"><button className="secondary" onClick={exit}>← Back</button><div><span className="eyebrow">Innings {inningsIndex + 1} · {innings.completed ? 'Complete' : 'Live'}</span><h1>{match.name}</h1></div><span className={innings.completed ? 'status complete' : 'status'}>{matchComplete ? 'Match complete' : innings.completed ? 'Innings complete' : 'Live'}</span></header>
       <section className="scoreboard"><div><span>{batting.name}</span><strong>{innings.runs}/{innings.wickets}</strong><small>{formatOvers(innings.legalBalls)} / {innings.maxOvers} overs</small></div><div className="score-meta"><span>Run rate</span><strong>{runRate}</strong>{required !== null && <><span>Required</span><strong>{required} runs{requiredRate ? ` @ ${requiredRate}` : ''}</strong></>}</div></section>
       {!innings.completed && <>
         <section className="players-card"><div><span>🏏 Striker</span>{innings.pendingBatter ? <select value="" onChange={selectBatter}><option value="">Choose new batter</option>{availableBatters(innings, batting).map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select> : <strong>{striker}</strong>}</div><div><span>Non-striker</span><strong>{nonStriker}</strong></div><div><span>Bowler</span><select value={innings.bowler ?? ''} onChange={selectBowler}>{bowling.players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></div></section>
