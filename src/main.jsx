@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { AuthProvider, useAuth } from './auth/AuthProvider';
+import Auth from './pages/Auth';
 import CreateMatch from './pages/CreateMatch';
 import MatchHistory from './pages/MatchHistory';
 import Scoring from './pages/Scoring';
@@ -10,6 +12,7 @@ function App() {
   const [screen, setScreen] = useState('home');
   const [match, setMatch] = useState(null);
   const [matches, setMatches] = useState(() => loadMatches());
+  const { user, configured, signOut } = useAuth();
 
   const saveMatch = (nextMatch) => {
     const saved = { ...nextMatch, updatedAt: nextMatch.updatedAt ?? new Date().toISOString() };
@@ -23,10 +26,14 @@ function App() {
   if (screen === 'create') return <CreateMatch onCreate={(createdMatch) => { saveMatch(createdMatch); setScreen('home'); }} onCancel={() => setScreen('home')} />;
   if (screen === 'history') return <MatchHistory matches={matches} onOpen={openMatch} onDelete={removeMatch} onBack={() => setScreen('home')} />;
   if (screen === 'scoring' && match) return <Scoring match={match} onSave={saveMatch} onExit={(saved) => { saveMatch(saved); setScreen('home'); }} />;
+  if (screen === 'auth') return <Auth onBack={() => setScreen('home')} />;
 
   return (
     <main className="app">
       <section className="hero"><span className="badge">🏏 PlayCricket</span><h1>Cricket made simple.</h1><p>Build matches, manage teams, and keep score from one clean dashboard.</p></section>
+      <div className="account-bar">
+        {user ? <><span>Signed in as {user.email}</span><button className="secondary" onClick={() => signOut()}>Sign out</button></> : <button className="secondary" onClick={() => setScreen('auth')}>{configured ? 'Sign in' : 'Set up account'}</button>}
+      </div>
       {match && <section className="active-match"><span className="eyebrow">Saved match</span><h2>{match.name}</h2><p>{match.teams[0].name} vs {match.teams[1].name} · {match.overs} overs</p><button className="primary" type="button" onClick={() => setScreen('scoring')}>Open Scoring</button></section>}
       <section className="cards" aria-label="PlayCricket features">
         <article className="card"><h2>Create a match</h2><p>Set teams, players, overs, and match format.</p><button className="primary" type="button" onClick={() => setScreen('create')}>New Match</button></article>
@@ -37,4 +44,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+createRoot(document.getElementById('root')).render(<AuthProvider><App /></AuthProvider>);
